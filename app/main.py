@@ -2,24 +2,27 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
+@app.get("/")
+def read_root():
+    return {"message": "Hello, Clipit!"}
 
-@app.get("/items/{item_id}")
-async def read_item(item_id: int):
+
+@app.get("/theme")
+
+# class getTheme :
+
+def twst():
     return {"item_id": item_id}
 
 
-@app.post("/test")
+@app.post("/ranking_{theme_id}")
 
 async def root():
     return {"message": "orld"}
 
 
 
-@app.get("/users/me")
+@app.post("/upload")
 async def read_user_me():
     return {"user_id": "the current user"}
 
-
-@app.get("/users/{user_id}")
-async def read_user(user_id: str):
-    return {"user_id": user_id}

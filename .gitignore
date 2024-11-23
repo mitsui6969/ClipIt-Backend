@@ -1,1 +1,3 @@
 venv/
+/create_db.py
+/create_db_table.py

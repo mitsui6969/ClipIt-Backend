@@ -1,0 +1,22 @@
+[
+    {
+        "theme_id": 1,
+        "theme": "hello"
+    },
+    {
+        "theme_id": 2,
+        "theme": "nature"
+    },
+    {
+        "theme_id": 3,
+        "theme": "cityscape"
+    },
+    {
+        "theme_id": 4,
+        "theme": "sports"
+    },
+    {
+        "theme_id": 5,
+        "theme": "technology"
+    }
+]
