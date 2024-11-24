@@ -9,7 +9,8 @@ import os
 import shutil
 from fastapi.middleware.cors import CORSMiddleware
 
-
+model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -56,14 +57,13 @@ def generate_id():
 
 
 @app.get("/")
-async def read_root():
+def read_root():
     return {"message": "Hello, Clipit!"}
 
 
 
 @app.get("/ranking_{theme_id}", response_model=rankingResponse)
-
-async def response_ranking(theme_id: int):
+def response_ranking(theme_id: int):
     results = [
         
             rankingData(
@@ -77,7 +77,7 @@ async def response_ranking(theme_id: int):
 
 
 @app.get("/theme", response_model=themeResponse)
-async def response_theme():
+def response_theme():
     results = [
             themeData(
                 rank = 1,
@@ -92,7 +92,7 @@ async def response_theme():
 
 @app.post("/upload", response_model=uploadResponse)
 
-async def response_similarity(file: UploadFile = File(...)):
+def response_similarity(file: UploadFile = File(...)):
 
     file_name = generate_id() + ".jpeg"
     file_path = os.path.join(IMG_DIR, file_name)
@@ -105,8 +105,7 @@ async def response_similarity(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid image file")
 
-    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
 
     inputs = processor(text=["a photo of a cat"], images=image, return_tensors="pt", padding=True)
 
