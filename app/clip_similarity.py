@@ -1,4 +1,4 @@
-from PIL import Image
+from Pillow import Image
 import requests
 from transformers import CLIPProcessor, CLIPModel
 import torch
