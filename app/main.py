@@ -28,7 +28,7 @@ async def root():
 
 
 
-@app.post("/upload")
+@app.get("/upload")
 async def read_user_me():
     model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
