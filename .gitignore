@@ -2,3 +2,7 @@ venv/
 /create_db.py
 /create_db_table.py
 /test.jpeg
+
+/upload_img/*
+!uploads/123456789.jpg
+/app/test.html

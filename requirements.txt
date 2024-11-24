@@ -1,6 +1,2 @@
 fastapi
-uvicorn
-pillow
-requests
-transformers
-torch
+uvicorn[standard]
