@@ -1,16 +1,22 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from PIL import Image
 from pydantic import BaseModel
-from transformers import CLIPProcessor, CLIPModel
-import torch
-import torch.nn.functional as F
 import time
 import os
 import shutil
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, sessionmaker
+import requests
 from fastapi.middleware.cors import CORSMiddleware
+from .models import themeTable, similarityTable 
 
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+DB_URL = os.getenv("DB_URL")
+engine = create_engine(DB_URL, echo=True)
+Session = sessionmaker(bind=engine)
+
+
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -25,27 +31,27 @@ IMG_DIR = "./upload_img"
 os.makedirs(IMG_DIR, exist_ok=True)
 
 
-#/ranking_{theme_id}のレスポンス
 class rankingData(BaseModel):
     similarity: float
+    theme_name: str
     rank: int
-    img_id: int
+    img_url: str
+    
 class rankingResponse(BaseModel):
     results: list[rankingData]
 
 
-#/uploadのレスポンス
 class uploadResponse(BaseModel):
     similarity: float
-    rank: int
+    rank: float
 
 
-#/themeのレスポンス
 class themeData(BaseModel):
     rank: int
     theme_id: int
-    similarity: int
-    img_id: int
+    theme_name: str
+    similarity: float
+    img_url: str
 
 class themeResponse(BaseModel):
     results: list[themeData]
@@ -53,7 +59,6 @@ class themeResponse(BaseModel):
 def generate_id():
     timestamp = int(time.time() * 1000)
     return str(timestamp)
-
 
 
 @app.get("/")
@@ -64,57 +69,69 @@ def read_root():
 
 @app.get("/ranking_{theme_id}", response_model=rankingResponse)
 def response_ranking(theme_id: int):
-    results = [
-        
-            rankingData(
-                similarity = 20+1,
-                rank = 1,
-                img_id = 1732467566068+1
-            )
-        for i in range(10)
-    ]
-    return rankingResponse(results=results)
+
+    session  = Session()
+    theme = session.query(themeTable).filter(themeTable.theme_id == theme_id).first()
+    similarities = session.query(similarityTable).filter(similarityTable.theme_id == theme_id).all()
+    theme_name = theme.theme
+
+    ranking_data = []
+    for rank, similarity in enumerate(similarities, start=1):
+        ranking_data.append(rankingData(
+            similarity=similarity.similarity,
+            theme_name=theme_name,
+            rank=3,
+            img_url=f"https://clipit-imgserver.onrender.com//upload_img/{similarity.img_id}.jpg" 
+        ))
+    
+    return rankingResponse(results=ranking_data)
 
 
 @app.get("/theme", response_model=themeResponse)
 def response_theme():
-    results = [
-            themeData(
-                rank = 1,
-                theme_id = 1,
-                similarity = 20+1,
-                img_id = 1732467566068
-            )
-        for i in range(10)
-    ]
-    return themeResponse(results=results)
+    session  = Session()
+
+    themes = session.query(themeTable).all()
+    
+    theme_data = []
+    for theme in themes:
+        similarities = session.query(similarityTable).filter(similarityTable.theme_id == theme.theme_id).all()
+        
+        for similarity in similarities:
+            theme_data.append(themeData(
+                rank=3,
+                theme_id=theme.theme_id,
+                theme_name=theme.theme,
+                similarity=similarity.similarity,
+                img_url=f"https://clipit-imgserver.onrender.com//upload_img/{similarity.img_id}.jpg"             
+                ))
+    
+    return themeResponse(results=theme_data)
 
 
 @app.post("/upload", response_model=uploadResponse)
 
-def response_similarity(file: UploadFile = File(...)):
+def response_similarity(file: UploadFile = File(...), theme_id: int = Form(...)):
+    print("upload")
+    print(f"file:{file.filename}, theme: {theme_id}")  
+    
+    session  = Session()
 
-    file_name = generate_id() + ".jpeg"
-    file_path = os.path.join(IMG_DIR, file_name)
+    theme = session.query(themeTable).filter(themeTable.theme_id == theme_id).first()
+    print(f"file:{file.filename}, theme: {theme.theme}")  
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    files = {
+        "file": (file.filename, file.file, file.content_type)
+    }
+    form_data = {
+        "theme": theme.theme,
+    }
 
-    try:
-        image = Image.open(file_path)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid image file")
-
-
-
-    inputs = processor(text=["a photo of a cat"], images=image, return_tensors="pt", padding=True)
-
-    outputs = model(**inputs)
-    image_embeds = outputs.image_embeds
-    text_embeds = outputs.text_embeds
-
-    cosine_similarity = F.cosine_similarity(image_embeds, text_embeds)
-    similarity_percentage = cosine_similarity.item() * 100
-
-    rank = int(similarity_percentage // 10)
-    return uploadResponse(similarity=similarity_percentage, rank=rank)
+    response = requests.post("https://clipit-imgserver.onrender.com/upload", files=files, data=form_data)
+    data = response.json()
+    similarity = float(data.get("similarity", 0))
+    img_id = float(data.get("img_id", 0))
+    print(f"similarity:{similarity} theme_id: {theme_id} img_id={img_id}")  
+    new_similarity = similarityTable(img_id=img_id, theme_id=theme_id, similarity=similarity)
+    session.add(new_similarity)
+    return uploadResponse(similarity=similarity, rank = 2)
