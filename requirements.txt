@@ -4,3 +4,4 @@ pillow
 python-multipart
 requests
 sqlalchemy
+psycopg2
