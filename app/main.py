@@ -3,6 +3,7 @@ from PIL import Image
 from pydantic import BaseModel
 import time
 import os
+import logging
 import shutil
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -81,6 +82,7 @@ def response_ranking(theme_id: int):
             similarity=similarity.similarity,
             theme_name=theme_name,
             rank=3,
+            theme_id = theme_id,
             img_url=f"https://clipit-imgserver.onrender.com//upload_img/{similarity.img_id}.jpg" 
         ))
     
@@ -111,23 +113,24 @@ def response_theme():
 
 @app.post("/upload", response_model=uploadResponse)
 
-def response_similarity(file: UploadFile = File(...), theme_id: int = Form(...)):
+def response_similarity(img_url: str = Form(...), theme_id: int = Form(...)):
     print("upload")
-    print(f"file:{file.filename}, theme: {theme_id}")  
+    print(f"file:{img_url}, theme: {theme_id}")  
     
     session  = Session()
 
     theme = session.query(themeTable).filter(themeTable.theme_id == theme_id).first()
-    print(f"file:{file.filename}, theme: {theme.theme}")  
+    print(f"file:{img_url}, theme: {theme.theme}")  
 
-    files = {
-        "file": (file.filename, file.file, file.content_type)
-    }
+    # files = {
+    #     "file": (file.filename, file.file, file.content_type)
+    # }
     form_data = {
+        "image_url": img_url,
         "theme": theme.theme,
     }
 
-    response = requests.post("https://clipit-imgserver.onrender.com/upload", files=files, data=form_data)
+    response = requests.post("https://clipit-imgserver.onrender.com/upload",  data=form_data)
     data = response.json()
     similarity = float(data.get("similarity", 0))
     img_id = float(data.get("img_id", 0))
