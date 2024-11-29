@@ -82,9 +82,8 @@ def response_ranking(theme_id: int):
             similarity=similarity.similarity,
             theme_name=theme_name,
             rank=3,
-            theme_id = theme_id
-            img_url=f"https://firebasestorage.googleapis.com/v0/b/clipit-2e405.firebasestorage.app/o/1732782756708.png?alt=media&token=b4bd772e-f472-4911-85c1-cd530d2003a8" 
-            # img_url=f"https://clipit-imgserver.onrender.com//upload_img/{similarity.img_id}.jpg" 
+            theme_id = theme_id,
+            img_url=f"https://clipit-imgserver.onrender.com//upload_img/{similarity.img_id}.jpg" 
         ))
     
     return rankingResponse(results=ranking_data)
