@@ -1,19 +1,16 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from PIL import Image
+from fastapi import FastAPI,HTTPException, Form
 from pydantic import BaseModel
-import time
 import os
-import logging
-import shutil
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
 import requests
+import logging
+from sqlalchemy import create_engine,text
+from sqlalchemy.orm import  sessionmaker
 from fastapi.middleware.cors import CORSMiddleware
 from .models import themeTable, similarityTable 
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 DB_URL = os.getenv("DB_URL")
-engine = create_engine(DB_URL, echo=True)
+engine = create_engine(DB_URL,  connect_args={"client_encoding": "utf8"} ,echo=True)
 Session = sessionmaker(bind=engine)
 
 
@@ -28,15 +25,12 @@ app.add_middleware(
 )
 
 
-IMG_DIR = "./upload_img"
-os.makedirs(IMG_DIR, exist_ok=True)
-
-
 class rankingData(BaseModel):
     similarity: float
-    theme_name: str
     rank: int
-    img_url: str
+    image_url: str
+    theme_name: str
+    theme_id: int
     
 class rankingResponse(BaseModel):
     results: list[rankingData]
@@ -44,7 +38,7 @@ class rankingResponse(BaseModel):
 
 class uploadResponse(BaseModel):
     similarity: float
-    rank: float
+    rank: int
 
 
 class themeData(BaseModel):
@@ -52,41 +46,47 @@ class themeData(BaseModel):
     theme_id: int
     theme_name: str
     similarity: float
-    img_url: str
+    image_url: str
 
 class themeResponse(BaseModel):
     results: list[themeData]
 
-def generate_id():
-    timestamp = int(time.time() * 1000)
-    return str(timestamp)
+
 
 
 @app.get("/")
 def read_root():
     return {"message": "Hello, Clipit!"}
 
-
-
 @app.get("/ranking_{theme_id}", response_model=rankingResponse)
 def response_ranking(theme_id: int):
 
     session  = Session()
     theme = session.query(themeTable).filter(themeTable.theme_id == theme_id).first()
-    similarities = session.query(similarityTable).filter(similarityTable.theme_id == theme_id).all()
     theme_name = theme.theme
 
+    similarity_sort= (
+        session.query(similarityTable)
+        .filter(similarityTable.theme_id ==theme_id)
+        .order_by(similarityTable.similarity.desc())
+        .limit(10)
+        .all()
+    )
     ranking_data = []
-    for rank, similarity in enumerate(similarities, start=1):
+    for rank, similarity in enumerate(similarity_sort, start=1):
         ranking_data.append(rankingData(
             similarity=similarity.similarity,
             theme_name=theme_name,
-            rank=3,
-            theme_id = theme_id,
-            img_url=f"https://clipit-imgserver.onrender.com//upload_img/{similarity.img_id}.jpg" 
+            rank=rank,
+            theme_id = similarity.theme_id,
+            image_url= similarity.img_url
         ))
     
     return rankingResponse(results=ranking_data)
+
+
+
+
 
 
 @app.get("/theme", response_model=themeResponse)
@@ -97,44 +97,85 @@ def response_theme():
     
     theme_data = []
     for theme in themes:
-        similarities = session.query(similarityTable).filter(similarityTable.theme_id == theme.theme_id).all()
-        
-        for similarity in similarities:
+        similarity_sort = (
+            session.query(similarityTable)
+            .filter(similarityTable.theme_id == theme.theme_id)
+            .order_by(similarityTable.similarity.desc())
+            .first() 
+        )
+        if similarity_sort:
             theme_data.append(themeData(
-                rank=3,
+                rank=1,
                 theme_id=theme.theme_id,
                 theme_name=theme.theme,
-                similarity=similarity.similarity,
-                img_url=f"https://clipit-imgserver.onrender.com//upload_img/{similarity.img_id}.jpg"             
-                ))
-    
+                similarity=similarity_sort.similarity,
+                image_url= similarity_sort.img_url
+            ))
+        else:
+            theme_data.append(themeData(
+                rank=1,
+                theme_id=theme.theme_id,
+                theme_name=theme.theme,
+                similarity=0.0,
+                image_url= "https://firebasestorage.googleapis.com/v0/b/clipit-2e405.firebasestorage.app/o/test.jpg?alt=media&token=67a3500c-b0d9-481c-a2d8-309ee1a1fc16"
+            ))
     return themeResponse(results=theme_data)
 
 
 @app.post("/upload", response_model=uploadResponse)
 
 def response_similarity(img_url: str = Form(...), theme_id: int = Form(...)):
-    print("upload")
-    print(f"file:{img_url}, theme: {theme_id}")  
+    logging.info("upload")
+    logging.info(f"file:{img_url}, theme: {theme_id}")  
     
     session  = Session()
 
     theme = session.query(themeTable).filter(themeTable.theme_id == theme_id).first()
-    print(f"file:{img_url}, theme: {theme.theme}")  
+        
 
-    # files = {
-    #     "file": (file.filename, file.file, file.content_type)
-    # }
+    logging.info(f"file:{img_url}, theme: {theme.theme}")  
+
     form_data = {
-        "image_url": img_url,
         "theme": theme.theme,
-    }
+        "img_url": img_url
 
-    response = requests.post("https://clipit-imgserver.onrender.com/upload",  data=form_data)
+    }
+    logging.info(f"form_data:{form_data}")  
+    headers = {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'}
+
+    response = requests.post("https://clipit-imgserver.onrender.com/upload",  headers= headers,data=form_data)
     data = response.json()
+    logging.info(data)
     similarity = float(data.get("similarity", 0))
-    img_id = float(data.get("img_id", 0))
-    print(f"similarity:{similarity} theme_id: {theme_id} img_id={img_id}")  
-    new_similarity = similarityTable(img_id=img_id, theme_id=theme_id, similarity=similarity)
+    logging.info(f"similarity:{similarity}")  
+
+
+
+    new_similarity = similarityTable(img_url=img_url, theme_id=theme_id, similarity=similarity)
     session.add(new_similarity)
-    return uploadResponse(similarity=similarity, rank = 2)
+    session.commit()
+
+    similarity_sort= (
+        session.query(similarityTable)
+        .filter(similarityTable.theme_id ==theme_id)
+        .order_by(similarityTable.similarity.desc())
+        .all()
+    )
+    rank = None
+    for i, db in enumerate(similarity_sort, 1): 
+        if db.similarity < similarity:
+            rank = i
+            break
+
+    return uploadResponse(similarity=similarity, rank = rank)
+
+
+@app.post("/register_theme")
+def register_theme(theme: str = Form(...)):
+    logging.info(f"register_theme:{theme}")  
+    session  = Session()
+    session.execute(text("SET client_encoding TO 'UTF8'"))
+    new_theme = themeTable(theme=theme)
+    session.add(new_theme)
+    session.commit()  
+    return True
