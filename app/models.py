@@ -2,9 +2,6 @@ import os
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
-
-
-DB_URL = os.getenv("DB_URL")
 Base = declarative_base() 
 
 class themeTable(Base):
@@ -20,4 +17,3 @@ class similarityTable(Base):
     theme_id = Column(Integer,ForeignKey("theme_table.theme_id"), index=True)
     similarity = Column(Float)
     theme = relationship("themeTable", back_populates="similarities")
-
